@@ -51,9 +51,9 @@ jobs:
         working-directory: neoqn
         run: |
           chmod +x gradlew
-          export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(which java)")")")"
-          echo "Using JAVA_HOME=$JAVA_HOME"
-          java -version
+          unset JAVA_HOME
+          export JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64
+          echo "JAVA_HOME is now: $JAVA_HOME"
           ./gradlew --no-daemon :provider:assembleRelease
 
       - name: Publish APK
