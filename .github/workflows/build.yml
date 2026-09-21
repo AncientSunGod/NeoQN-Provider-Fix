@@ -49,8 +49,6 @@ jobs:
 
       - name: Build provider APK
         working-directory: neoqn
-        env:
-          JAVA_HOME: ${{ steps.setup-java.outputs.path }}
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon :provider:assembleRelease
