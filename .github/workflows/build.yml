@@ -42,9 +42,7 @@ jobs:
 
       - name: Build provider APK
         working-directory: neoqn
-        run:  
-              chmod +x gradlew
-                ./gradlew --no-daemon :provider:assembleRelease
+        run: chmod +x gradlew && ./gradlew --no-daemon :provider:assembleRelease
 
       - name: Publish APK
         uses: actions/upload-artifact@v4
