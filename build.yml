@@ -1,0 +1,50 @@
+name: Build NeoQN Fixed Providers
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'provider-overrides.zip'
+      - '.github/workflows/build.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download NeoQN v2.2.0 source
+        run: |
+          git clone --depth 1 --branch v2.2.0 https://github.com/Shadyteal2/QuickNovel-Enhanced.git neoqn
+
+      - name: Unpack provider overrides
+        run: |
+          unzip -q provider-overrides.zip -d neoqn
+          mkdir -p neoqn/provider/src/main/java/com/lagradost/quicknovel/providers
+
+      - name: Fetch current WTR-LAB provider
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/LagradOst/QuickNovel/master/app/src/main/java/com/lagradost/quicknovel/providers/WtrLabProvider.kt \
+            -o neoqn/provider/src/main/java/com/lagradost/quicknovel/providers/WtrLabProvider.kt
+          sed -i 's/override val iconId = R.drawable.icon_wtrlab/override val iconId: Int? = null/' \
+            neoqn/provider/src/main/java/com/lagradost/quicknovel/providers/WtrLabProvider.kt
+
+      - name: Add provider module to NeoQN build
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('neoqn/settings.gradle.kts')
+          s = p.read_text()
+          if 'include(":provider")' not in s:
+              s += '\ninclude(":provider")\n'
+          p.write_text(s)
+          PY
+
+      - name: Build provider APK
+        working-directory: neoqn
+        run: ./gradlew --no-daemon :provider:assembleRelease
+
+      - name: Publish APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoQN_Providers_Fixed
+          path: neoqn/provider/build/outputs/apk/release/provider-release.apk
+          if-no-files-found: error
