@@ -77,16 +77,15 @@ jobs:
           echo "Checking for remaining Windows Java paths:"
           grep -n -i "Program Files/Android/Android Studio\|org.gradle.java.home\|com.android.build.jdk.java.home" gradlew gradle.properties || true
 
-      - name: Find provider files
+      - name: Show provider configuration
         working-directory: neoqn
         shell: bash
         run: |
-          echo "===== PROJECT STRUCTURE ====="
-          find . -maxdepth 4 -type f \( -name "build.gradle*" -o -name "AndroidManifest.xml" \) | sort
+          echo "===== provider/build.gradle ====="
+          cat provider/build.gradle
 
-          echo "===== PROVIDER REFERENCES ====="
-          find . -type f \( -name "build.gradle*" -o -name "AndroidManifest.xml" \) \
-            -print0 | xargs -0 grep -l "provider" 2>/dev/null | head -50 || true
+          echo "===== provider/AndroidManifest.xml ====="
+          cat provider/src/main/AndroidManifest.xml
           
       - name: Diagnose provider build files
         working-directory: neoqn
