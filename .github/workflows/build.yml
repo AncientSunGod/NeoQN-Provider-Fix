@@ -86,20 +86,4 @@ jobs:
 
           echo "===== provider/AndroidManifest.xml ====="
           cat provider/src/main/AndroidManifest.xml
-          
-      - name: Diagnose provider build files
-        working-directory: neoqn
-        shell: bash
-        run: |
-          echo "===== ALL BUILD FILES ====="
-          find . -type f \( -name "build.gradle" -o -name "build.gradle.kts" \) | sort
-
-          echo "===== ALL PROVIDER FILES ====="
-          find . -type f | grep -i "provider" | head -100
-
-          echo "===== SETTINGS ====="
-          cat settings.gradle.kts
-
-          echo "===== PROVIDER DIRECTORY ====="
-          find provider -maxdepth 3 -type f -print 2>/dev/null || true
         
