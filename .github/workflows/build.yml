@@ -11,6 +11,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout this repository
+        uses: actions/checkout@v4
       - name: Download NeoQN v2.2.0 source
         run: |
           git clone --depth 1 --branch v2.2.0 https://github.com/Shadyteal2/QuickNovel-Enhanced.git neoqn
