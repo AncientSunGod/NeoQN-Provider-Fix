@@ -81,6 +81,8 @@ jobs:
         working-directory: neoqn
         shell: bash
         run: |
+          chmod +x gradlew
+
           echo "===== ROOT BUILD.GRADLE.KTS ====="
           cat build.gradle.kts
 
