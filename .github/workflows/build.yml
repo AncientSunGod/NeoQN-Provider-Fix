@@ -77,23 +77,20 @@ jobs:
           echo "Checking for remaining Windows Java paths:"
           grep -n -i "Program Files/Android/Android Studio\|org.gradle.java.home\|com.android.build.jdk.java.home" gradlew gradle.properties || true
 
-      - name: Diagnose provider build configuration
+      - name: Diagnose Android build configuration
         working-directory: neoqn
         shell: bash
         run: |
           chmod +x gradlew
 
-          echo "===== ROOT BUILD.GRADLE.KTS ====="
-          cat build.gradle.kts
+          echo "===== VERSION CATALOG ====="
+          cat gradle/libs.versions.toml
+
+          echo "===== APP BUILD.GRADLE ====="
+          cat app/build.gradle
 
           echo "===== PROVIDER BUILD.GRADLE ====="
           cat provider/build.gradle
 
           echo "===== GRADLE VERSION ====="
           ./gradlew --version
-
-          echo "===== PROVIDER TASKS ====="
-          ./gradlew :provider:tasks --all | grep -E "assemble|process.*Resources|package.*Resources" || true
-
-          echo "===== PROVIDER OUTPUT FILES ====="
-          find provider/build -type f 2>/dev/null | sort | tail -100 || true
