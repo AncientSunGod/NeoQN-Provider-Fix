@@ -47,18 +47,23 @@ jobs:
          distribution: temurin
          java-version: '17'
 
-      - name: Build provider APK
+      - name: Diagnose Java configuration
         working-directory: neoqn
+        shell: bash
         run: |
-          chmod +x gradlew
-          unset JAVA_HOME
-          unset JAVA_OPTS
-          unset GRADLE_OPTS
-          ./gradlew --no-daemon -Dorg.gradle.java.home=/usr/lib/jvm/temurin-17-jdk-amd64 :provider:assembleRelease
+          echo "===== ENVIRONMENT JAVA ====="
+          echo "JAVA_HOME=$JAVA_HOME"
+          which java
+          java -version
 
-      - name: Publish APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: NeoQN_Providers_Fixed
-          path: neoqn/provider/build/outputs/apk/release/provider-release.apk
-          if-no-files-found: error
+          echo "===== GRADLEW JAVA REFERENCES ====="
+          grep -n -i "JAVA_HOME\|Android Studio\|jbr" gradlew || true
+
+          echo "===== GRADLE CONFIG REFERENCES ====="
+          grep -Rni --exclude-dir=.git \
+            "Program Files/Android/Android Studio\|Android Studio/jbr" . \
+            2>/dev/null | head -50 || true
+
+          echo "===== GRADLE PROPERTIES ====="
+          find . -name "gradle.properties" -type f -print -exec cat {} \; || true
+        
