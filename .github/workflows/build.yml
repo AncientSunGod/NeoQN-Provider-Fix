@@ -77,20 +77,21 @@ jobs:
           echo "Checking for remaining Windows Java paths:"
           grep -n -i "Program Files/Android/Android Studio\|org.gradle.java.home\|com.android.build.jdk.java.home" gradlew gradle.properties || true
 
-      - name: Diagnose Android build configuration
+      - name: Use compatible Gradle version
         working-directory: neoqn
         shell: bash
         run: |
           chmod +x gradlew
+          sed -i 's/gradle-8\.11\.1-bin\.zip/gradle-8.9-bin.zip/' gradle/wrapper/gradle-wrapper.properties
+          echo "Using Gradle wrapper:"
+          grep distributionUrl gradle/wrapper/gradle-wrapper.properties
 
-          echo "===== VERSION CATALOG ====="
-          cat gradle/libs.versions.toml
-
-          echo "===== APP BUILD.GRADLE ====="
-          cat app/build.gradle
-
-          echo "===== PROVIDER BUILD.GRADLE ====="
-          cat provider/build.gradle
-
-          echo "===== GRADLE VERSION ====="
-          ./gradlew --version
+      - name: Build provider APK
+        working-directory: neoqn
+        shell: bash
+        run: |
+          chmod +x gradlew
+          export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(which java)")")")"
+          echo "Using JAVA_HOME=$JAVA_HOME"
+          java -version
+          ./gradlew --no-daemon --rerun-tasks :provider:assembleRelease
