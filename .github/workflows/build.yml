@@ -51,6 +51,9 @@ jobs:
         working-directory: neoqn
         run: |
           chmod +x gradlew
+          export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(which java)")")")"
+          echo "Using JAVA_HOME=$JAVA_HOME"
+          java -version
           ./gradlew --no-daemon :provider:assembleRelease
 
       - name: Publish APK
