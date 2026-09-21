@@ -47,23 +47,29 @@ jobs:
          distribution: temurin
          java-version: '17'
 
-      - name: Diagnose Java configuration
+      - name: Fix Windows Java paths
         working-directory: neoqn
         shell: bash
         run: |
-          echo "===== ENVIRONMENT JAVA ====="
-          echo "JAVA_HOME=$JAVA_HOME"
-          which java
-          java -version
+          sed -i '/export JAVA_HOME="\/c\/Program Files\/Android\/Android Studio\/jbr"/d' gradlew
+          sed -i '/org.gradle.java.home=C:\\Program Files\\Android\\Android Studio\\jbr/d' gradle.properties
+          sed -i '/org.gradle.java.installations.paths=C:\\Program Files\\Android\\Android Studio\\jbr/d' gradle.properties
+          sed -i '/com.android.build.jdk.java.home=C:\\Program Files\\Android\\Android Studio\\jbr/d' gradle.properties
+          sed -i '/android.experimental.jdk.image.transform.enabled=false/d' gradle.properties
+          sed -i '/android.experimental.additional.jdk.image.transform.enabled=false/d' gradle.properties
+          sed -i '/android.jdk.image.transform.enabled=false/d' gradle.properties
+          sed -i '/android.sdk.jdk.image.transform.enabled=false/d' gradle.properties
+          sed -i '/android.sdk.android-35.jdk.image.transform.enabled=false/d' gradle.properties
 
-          echo "===== GRADLEW JAVA REFERENCES ====="
-          grep -n -i "JAVA_HOME\|Android Studio\|jbr" gradlew || true
+          echo "Java paths after cleanup:"
+          grep -n -i "JAVA_HOME\|java.home\|Android Studio" gradlew gradle.properties || true
 
-          echo "===== GRADLE CONFIG REFERENCES ====="
-          grep -Rni --exclude-dir=.git \
-            "Program Files/Android/Android Studio\|Android Studio/jbr" . \
-            2>/dev/null | head -50 || true
-
-          echo "===== GRADLE PROPERTIES ====="
-          find . -name "gradle.properties" -type f -print -exec cat {} \; || true
+      - name: Build provider APK
+        working-directory: neoqn
+        shell: bash
+        run: |
+          chmod +x gradlew
+          export JAVA_HOME=/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.20-1/x64
+          echo "Using JAVA_HOME=$JAVA_HOME"
+          ./gradlew --no-daemon :provider:assembleRelease
         
