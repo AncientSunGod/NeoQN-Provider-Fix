@@ -77,29 +77,21 @@ jobs:
           echo "Checking for remaining Windows Java paths:"
           grep -n -i "Program Files/Android/Android Studio\|org.gradle.java.home\|com.android.build.jdk.java.home" gradlew gradle.properties || true
 
-      - name: Prepare provider resources
+      - name: Diagnose provider build configuration
         working-directory: neoqn
         shell: bash
         run: |
-          mkdir -p provider/src/main/res/values
+          echo "===== ROOT BUILD.GRADLE.KTS ====="
+          cat build.gradle.kts
 
-          cat > provider/src/main/res/values/strings.xml <<'EOF'
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <string name="provider_name">NeoQN Fixed Providers</string>
-          </resources>
-          EOF
+          echo "===== PROVIDER BUILD.GRADLE ====="
+          cat provider/build.gradle
 
-          echo "Provider resources created:"
-          cat provider/src/main/res/values/strings.xml
+          echo "===== GRADLE VERSION ====="
+          ./gradlew --version
 
-      - name: Build provider APK
-        working-directory: neoqn
-        shell: bash
-        run: |
-          chmod +x gradlew
-          export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(which java)")")")"
-          echo "Using JAVA_HOME=$JAVA_HOME"
-          java -version
-          ./gradlew --no-daemon --rerun-tasks :provider:assembleRelease
-        
+          echo "===== PROVIDER TASKS ====="
+          ./gradlew :provider:tasks --all | grep -E "assemble|process.*Resources|package.*Resources" || true
+
+          echo "===== PROVIDER OUTPUT FILES ====="
+          find provider/build -type f 2>/dev/null | sort | tail -100 || true
