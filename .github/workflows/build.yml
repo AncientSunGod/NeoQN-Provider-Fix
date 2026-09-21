@@ -118,3 +118,42 @@ jobs:
           echo ""
           echo "===== SEARCHING FOR WebViewResolver.class ====="
           find app/build -name "WebViewResolver.class" -print
+
+      - name: Find provider API classes
+        working-directory: neoqn
+        shell: bash
+        run: |
+          echo "===== PROVIDER API CLASSES ====="
+
+          echo ""
+          echo "----- Main Kotlin/Java classes -----"
+          for cls in \
+            MainAPI \
+            ChapterData \
+            ErrorLoadingException \
+            HeadMainPageResponse \
+            LoadResponse \
+            SearchResponse \
+            UserReview
+          do
+            echo "=== $cls ==="
+            find app/build/tmp/kotlin-classes/release \
+                 app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes \
+                 -name "$cls.class" -print
+          done
+
+          echo ""
+          echo "----- Network classes -----"
+          find app/build/tmp/kotlin-classes/release \
+               app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes \
+               -name "WebViewResolver.class" -print
+
+          echo ""
+          echo "----- Utility classes -----"
+          find app/build/tmp/kotlin-classes/release \
+               app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes \
+               -path "*util*" -name "*.class" | grep "AppUtils" || true
+
+          echo ""
+          echo "----- R classes -----"
+          find app/build -type f -name "R.class" -o -name "R\$*.class" | sort
