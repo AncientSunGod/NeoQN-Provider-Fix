@@ -86,12 +86,15 @@ jobs:
           echo "Using Gradle wrapper:"
           grep distributionUrl gradle/wrapper/gradle-wrapper.properties
 
-      - name: Build provider APK
+      - name: Check provider dependencies
         working-directory: neoqn
         shell: bash
         run: |
-          chmod +x gradlew
-          export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(which java)")")")"
-          echo "Using JAVA_HOME=$JAVA_HOME"
-          java -version
-          ./gradlew --no-daemon --rerun-tasks :provider:assembleRelease
+          echo "===== PROVIDER SOURCE IMPORTS ====="
+          grep -R "^import " provider/src/main/java | sort -u
+
+          echo "===== PROVIDER SOURCE FILES ====="
+          find provider/src/main/java -type f -name "*.kt" -print | sort
+
+          echo "===== APP CLASSES USED BY PROVIDER ====="
+          grep -R "com.lagradost.quicknovel" provider/src/main/java | head -100 || true
