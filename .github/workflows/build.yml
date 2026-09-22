@@ -158,7 +158,6 @@ jobs:
           echo "----- R classes -----"
           find app/build -type f -name "R.class" -o -name "R\$*.class" | sort
 
-                    find app/build -type f -name "R.class" -o -name "R\$*.class" | sort
 
       - name: Create provider API JAR
         working-directory: neoqn
@@ -199,3 +198,11 @@ jobs:
           echo ""
           echo "===== PROVIDER DEPENDENCIES ====="
           grep -A10 "^dependencies" provider/build.gradle
+
+      - name: Build provider APK
+        working-directory: neoqn
+        shell: bash
+        run: |
+          echo "===== BUILDING PROVIDER APK ====="
+          chmod +x gradlew
+          ./gradlew --no-daemon --rerun-tasks :provider:assembleRelease
