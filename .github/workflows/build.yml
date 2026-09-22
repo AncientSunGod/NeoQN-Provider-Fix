@@ -10,36 +10,40 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout this repository
+      - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Download NeoQN v2.2.0 source
         run: |
-          git clone --depth 1 --branch v2.2.0 https://github.com/Shadyteal2/QuickNovel-Enhanced.git neoqn
+          git clone --depth 1 --branch v2.2.0 \
+            https://github.com/Shadyteal2/QuickNovel-Enhanced.git neoqn
 
       - name: Unpack provider overrides
         run: |
           unzip -q provider-overrides.zip -d neoqn
-          mkdir -p neoqn/provider/src/main/java/com/lagradost/quicknovel/providers
 
-      
-      - name: Add provider module to NeoQN build
+      - name: Add provider module
+        working-directory: neoqn
         run: |
           python3 - <<'PY'
           from pathlib import Path
-          p = Path('neoqn/settings.gradle.kts')
+
+          p = Path("settings.gradle.kts")
           s = p.read_text()
+
           if 'include(":provider")' not in s:
               s += '\ninclude(":provider")\n'
+
           p.write_text(s)
           PY
 
-      - name: Set up Java
-        id: setup-java
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
-         distribution: temurin
-         java-version: '21'
+          distribution: temurin
+          java-version: '21'
 
       - name: Fix Windows Java paths
         working-directory: neoqn
@@ -65,150 +69,78 @@ jobs:
           p.write_text("\n".join(lines) + "\n")
           PY
 
-          # Remove the hard-coded Windows JAVA_HOME from gradlew
           sed -i '/export JAVA_HOME="\/c\/Program Files\/Android\/Android Studio\/jbr"/d' gradlew
 
-          echo "Checking for remaining Windows Java paths:"
-          grep -n -i "Program Files/Android/Android Studio\|org.gradle.java.home\|com.android.build.jdk.java.home" gradlew gradle.properties || true
-
-      - name: Use compatible Gradle version
+      - name: Use compatible Gradle
         working-directory: neoqn
         shell: bash
         run: |
           chmod +x gradlew
-          sed -i 's/gradle-8\.11\.1-bin\.zip/gradle-8.9-bin.zip/' gradle/wrapper/gradle-wrapper.properties
-          echo "Using Gradle wrapper:"
-          grep distributionUrl gradle/wrapper/gradle-wrapper.properties
+          sed -i 's/gradle-8\.11\.1-bin\.zip/gradle-8.9-bin.zip/' \
+            gradle/wrapper/gradle-wrapper.properties
 
-      - name: Build NeoQN app classes for provider API
+      - name: Build NeoQN app classes
         working-directory: neoqn
         shell: bash
         run: |
-          echo "===== BUILDING MAIN APP CLASSES ====="
-
           chmod +x gradlew
 
           export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(which java)")")")"
-          echo "Using JAVA_HOME=$JAVA_HOME"
 
-          ./gradlew --no-daemon :app:compileReleaseKotlin :app:compileReleaseJavaWithJavac
+          ./gradlew --no-daemon \
+            :app:compileReleaseKotlin \
+            :app:compileReleaseJavaWithJavac
 
-          echo ""
-          echo "===== JAVA CLASS OUTPUTS ====="
-          find app/build -type d \( \
-            -path "*kotlin-classes/release" -o \
-            -path "*javac/release/*/classes" -o \
-            -path "*java-classes/release" \
-          \) -print
-
-          echo ""
-          echo "===== SEARCHING FOR MainAPI.class ====="
-          find app/build -name "MainAPI.class" -print
-
-          echo ""
-          echo "===== SEARCHING FOR R.class ====="
-          find app/build -name "R.class" -print
-
-          echo ""
-          echo "===== SEARCHING FOR WebViewResolver.class ====="
-          find app/build -name "WebViewResolver.class" -print
-
-      - name: Find provider API classes
+      - name: Use NeoQN classes directly for provider
         working-directory: neoqn
         shell: bash
         run: |
-          echo "===== PROVIDER API CLASSES ====="
+          python3 - <<'PY'
+          from pathlib import Path
 
-          echo ""
-          echo "----- Main Kotlin/Java classes -----"
-          for cls in \
-            MainAPI \
-            ChapterData \
-            ErrorLoadingException \
-            HeadMainPageResponse \
-            LoadResponse \
-            SearchResponse \
-            UserReview
-          do
-            echo "=== $cls ==="
-            find app/build/tmp/kotlin-classes/release \
-                 app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes \
-                 -name "$cls.class" -print
-          done
+          p = Path("provider/build.gradle")
+          s = p.read_text()
 
-          echo ""
-          echo "----- Network classes -----"
-          find app/build/tmp/kotlin-classes/release \
-               app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes \
-               -name "WebViewResolver.class" -print
+          old = "compileOnly project(':app')"
 
-          echo ""
-          echo "----- Utility classes -----"
-          find app/build/tmp/kotlin-classes/release \
-               app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes \
-               -path "*util*" -name "*.class" | grep "AppUtils" || true
+          new = """compileOnly files(
+              "$rootDir/app/build/tmp/kotlin-classes/release",
+              "$rootDir/app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes"
+          )"""
 
-          echo ""
-          echo "----- R classes -----"
-          find app/build -type f -name "R.class" -o -name "R\$*.class" | sort
+          if old not in s:
+              raise SystemExit(
+                  "Could not find the expected compileOnly project(':app') line"
+              )
 
-      - name: Create provider API JAR
-        working-directory: neoqn
-        shell: bash
-        run: |
-          echo "===== CREATING PROVIDER API JAR ====="
+          s = s.replace(old, new)
 
-          rm -rf provider-api-classes
-          mkdir -p provider-api-classes
+          p.write_text(s)
+          PY
 
-          echo "Copying Kotlin classes..."
-          cp -R app/build/tmp/kotlin-classes/release/com provider-api-classes/
-
-          echo "Copying Kotlin module metadata..."
-          if [ -d app/build/tmp/kotlin-classes/release/META-INF ]; then
-            cp -R app/build/tmp/kotlin-classes/release/META-INF provider-api-classes/
-          fi
-
-          echo "Copying Java classes..."
-          if [ -d app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com ]; then
-            cp -R app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com provider-api-classes/
-          fi
-
-          cd provider-api-classes
-
-          jar cf ../provider-api.jar com META-INF 2>/dev/null || jar cf ../provider-api.jar com
-
-          cd ..
-
-          echo ""
-          echo "===== PROVIDER API JAR ====="
-          ls -lh provider-api.jar
-
-          echo ""
-          echo "===== CHECKING MAIN API ====="
-          jar tf provider-api.jar | grep -E \
-            'MainAPI|MainActivity|MainActivityKt|CommonActivity' \
-            | head -100
-
-          echo ""
-          echo "===== CHECKING KOTLIN METADATA ====="
-          jar tf provider-api.jar | grep 'kotlin_module' || true
-      - name: Change provider dependency
-        working-directory: neoqn
-        shell: bash
-        run: |
-          echo "===== CHANGING PROVIDER DEPENDENCY ====="
-
-          sed -i 's|compileOnly project('\''\:app'\'')|compileOnly files("$rootDir/provider-api.jar")|' provider/build.gradle
-
-          echo ""
-          echo "===== PROVIDER DEPENDENCIES ====="
-          grep -A10 "^dependencies" provider/build.gradle
+          echo "Provider dependency now:"
+          grep -A12 "^dependencies" provider/build.gradle
 
       - name: Build provider APK
         working-directory: neoqn
         shell: bash
         run: |
-          echo "===== BUILDING PROVIDER APK ====="
           chmod +x gradlew
-          ./gradlew --no-daemon --rerun-tasks :provider:assembleRelease
+
+          ./gradlew --no-daemon \
+            --rerun-tasks \
+            :provider:assembleRelease
+
+      - name: Show generated APK
+        working-directory: neoqn
+        shell: bash
+        run: |
+          echo "===== GENERATED PROVIDER APK ====="
+          find provider/build/outputs/apk -type f -name "*.apk" -print
+
+      - name: Upload provider APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NeoQN-Fixed-Providers
+          path: neoqn/provider/build/outputs/apk/release/*.apk
+          if-no-files-found: error
