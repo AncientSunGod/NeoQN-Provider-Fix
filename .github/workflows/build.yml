@@ -103,6 +103,8 @@ jobs:
         working-directory: neoqn
         shell: bash
         run: |
+          set -e
+
           echo "===== CHECKING NEOQN API CLASSES ====="
 
           KOTLIN_CLASSES="app/build/tmp/kotlin-classes/release"
@@ -110,46 +112,48 @@ jobs:
 
           test -d "$KOTLIN_CLASSES" || {
             echo "ERROR: Kotlin class directory was not created."
+            echo "$KOTLIN_CLASSES"
             exit 1
           }
 
           test -d "$JAVA_CLASSES" || {
             echo "ERROR: Java class directory was not created."
+            echo "$JAVA_CLASSES"
             exit 1
           }
 
           echo ""
-          echo "MainAPI:"
+          echo "===== MainAPI ====="
           find "$KOTLIN_CLASSES" "$JAVA_CLASSES" \
             -name "MainAPI.class" -print
 
           echo ""
-          echo "MainAPIKt:"
+          echo "===== MainAPIKt ====="
           find "$KOTLIN_CLASSES" "$JAVA_CLASSES" \
             -name "MainAPIKt.class" -print
 
           echo ""
-          echo "ChapterData:"
+          echo "===== ChapterData ====="
           find "$KOTLIN_CLASSES" "$JAVA_CLASSES" \
             -name "ChapterData.class" -print
 
           echo ""
-          echo "LoadResponse:"
+          echo "===== LoadResponse ====="
           find "$KOTLIN_CLASSES" "$JAVA_CLASSES" \
             -name "LoadResponse.class" -print
 
           echo ""
-          echo "SearchResponse:"
+          echo "===== SearchResponse ====="
           find "$KOTLIN_CLASSES" "$JAVA_CLASSES" \
             -name "SearchResponse.class" -print
 
           echo ""
-          echo "WebViewResolver:"
+          echo "===== WebViewResolver ====="
           find "$KOTLIN_CLASSES" "$JAVA_CLASSES" \
             -name "WebViewResolver.class" -print
 
           echo ""
-          echo "Kotlin metadata:"
+          echo "===== Kotlin metadata ====="
           find "$KOTLIN_CLASSES/META-INF" \
             -name "*.kotlin_module" -print || true
 
@@ -159,7 +163,7 @@ jobs:
         run: |
           set -e
 
-          echo "===== CREATING NEOQN PROVIDER API JAR ====="
+          echo "===== CREATING PROVIDER API JAR ====="
 
           KOTLIN_CLASSES="app/build/tmp/kotlin-classes/release"
           JAVA_CLASSES="app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes"
@@ -168,14 +172,12 @@ jobs:
           API_JAR="$PWD/provider-api.jar"
 
           test -d "$KOTLIN_CLASSES" || {
-            echo "ERROR: Kotlin classes directory not found:"
-            echo "$KOTLIN_CLASSES"
+            echo "ERROR: Kotlin classes directory missing."
             exit 1
           }
 
           test -d "$JAVA_CLASSES" || {
-            echo "ERROR: Java classes directory not found:"
-            echo "$JAVA_CLASSES"
+            echo "ERROR: Java classes directory missing."
             exit 1
           }
 
@@ -184,24 +186,60 @@ jobs:
 
           mkdir -p "$API_DIR"
 
+          echo "Copying Kotlin classes..."
           cp -a "$KOTLIN_CLASSES"/. "$API_DIR"/
+
+          echo "Copying Java classes..."
           cp -a "$JAVA_CLASSES"/. "$API_DIR"/
 
-          jar --create --file "$API_JAR" -C "$API_DIR" .
+          echo ""
+          echo "Creating:"
+          echo "$API_JAR"
 
-          echo "===== VERIFYING API JAR ====="
+          jar --create \
+            --file "$API_JAR" \
+            -C "$API_DIR" .
 
-          jar tf "$API_JAR" | grep -E 'com/lagradost/quicknovel/(MainAPI|MainAPIKt|ChapterData|LoadResponse|SearchResponse)\.class' || {
-            echo "ERROR: Required NeoQN API classes are missing."
+          echo ""
+          echo "===== VERIFYING PROVIDER API JAR ====="
+
+          test -f "$API_JAR" || {
+            echo "ERROR: provider-api.jar was not created."
             exit 1
           }
 
-          jar tf "$API_JAR" | grep 'META-INF/.*\.kotlin_module' || {
-            echo "ERROR: Kotlin metadata is missing."
-            exit 1
-          }
+          echo ""
+          echo "Required NeoQN classes:"
 
-          echo "===== API JAR VERIFIED ====="
+          jar tf "$API_JAR" | grep -E \
+            'com/lagradost/quicknovel/(MainAPI|MainAPIKt|ChapterData|LoadResponse|SearchResponse)\.class' \
+            || {
+              echo "ERROR: Required NeoQN API classes are missing."
+              exit 1
+            }
+
+          echo ""
+          echo "Kotlin metadata:"
+
+          jar tf "$API_JAR" | grep \
+            'META-INF/.*\.kotlin_module' \
+            || {
+              echo "ERROR: Kotlin module metadata is missing."
+              exit 1
+            }
+
+          echo ""
+          echo "===== API JAR CONTENT CHECK ====="
+
+          jar tf "$API_JAR" | grep -E \
+            'com/lagradost/quicknovel/(MainAPI|MainAPIKt|ChapterData|LoadResponse|SearchResponse)\.class'
+
+          echo ""
+          jar tf "$API_JAR" | grep \
+            'META-INF/.*\.kotlin_module'
+
+          echo ""
+          echo "===== API JAR CREATED SUCCESSFULLY ====="
           ls -lh "$API_JAR"
 
       - name: Connect provider to NeoQN API JAR
@@ -213,7 +251,7 @@ jobs:
           echo "===== CONNECTING PROVIDER TO NEOQN API JAR ====="
 
           test -f provider-api.jar || {
-            echo "ERROR: provider-api.jar was not created."
+            echo "ERROR: provider-api.jar does not exist."
             exit 1
           }
 
@@ -224,69 +262,64 @@ jobs:
 
           if not p.exists():
               raise SystemExit(
-                  "ERROR: provider/build.gradle was not found."
+                  "ERROR: provider/build.gradle does not exist."
               )
 
-          text = p.read_text()
+          s = p.read_text()
 
           old = "compileOnly project(':app')"
+
           new = 'compileOnly files("$rootDir/provider-api.jar")'
 
-          if old not in text:
+          if old not in s:
               raise SystemExit(
-                  "ERROR: Could not find the old "
-                  "compileOnly project(':app') dependency."
+                  "ERROR: Could not find "
+                  "compileOnly project(':app') "
+                  "in provider/build.gradle"
               )
 
-          text = text.replace(old, new)
+          s = s.replace(old, new)
 
-          p.write_text(text)
+          p.write_text(s)
 
-          print("Provider dependency changed successfully.")
+          print("Provider dependency successfully changed.")
           PY
 
-          echo "===== CHECKING PROVIDER DEPENDENCY ====="
+          echo ""
+          echo "===== PROVIDER DEPENDENCIES ====="
 
-          grep -q 'compileOnly files("$rootDir/provider-api.jar")' provider/build.gradle || {
-            echo "ERROR: provider-api.jar dependency was not added."
-            exit 1
-          }
-
-          echo "===== PROVIDER API JAR CONNECTED ====="
-
-      - name: Verify provider configuration
-        working-directory: neoqn
-        shell: bash
-        run: |
-          echo "===== PROVIDER SOURCES ====="
-
-          find provider/src/main/java -type f -name "*.kt" -print
+          grep -A20 "^dependencies" provider/build.gradle
 
           echo ""
-          echo "===== PROVIDER BUILD FILE ====="
+          echo "===== VERIFYING API JAR DEPENDENCY ====="
 
-          grep -A15 "^dependencies" provider/build.gradle
+          grep -q 'compileOnly files("$rootDir/provider-api.jar")' \
+            provider/build.gradle \
+            || {
+              echo "ERROR: provider-api.jar dependency was not added."
+              exit 1
+            }
 
           echo ""
-          echo "===== CHECKING FOR OLD APP DEPENDENCY ====="
-
-          if grep -q "compileOnly project(':app')" provider/build.gradle; then
-            echo "ERROR: Old project dependency is still present."
-            exit 1
-          fi
-
-          echo "Old project dependency successfully removed."
+          echo "Provider is connected to provider-api.jar."
 
       - name: Add NeoQN app import to providers
         working-directory: neoqn
         shell: bash
         run: |
+          set -e
+
           python3 - <<'PY'
           from pathlib import Path
 
           provider_root = Path(
               "provider/src/main/java/com/lagradost/quicknovel/providers"
           )
+
+          if not provider_root.exists():
+              raise SystemExit(
+                  "ERROR: Provider source directory does not exist."
+              )
 
           for p in provider_root.rglob("*.kt"):
               s = p.read_text()
@@ -305,12 +338,16 @@ jobs:
               for i, line in enumerate(lines):
                   if line.startswith("package "):
                       package_index = i
-                  elif line.startswith("import ") and first_import_index is None:
+
+                  if (
+                      line.startswith("import ")
+                      and first_import_index is None
+                  ):
                       first_import_index = i
 
               if package_index is None:
                   raise SystemExit(
-                      f"No package declaration found in {p}"
+                      f"ERROR: No package declaration found in {p}"
                   )
 
               insert_at = (
@@ -327,12 +364,53 @@ jobs:
               p.write_text("\n".join(lines) + "\n")
 
               print(f"Added app import: {p}")
-          PY
+
+      - name: Verify provider configuration
+        working-directory: neoqn
+        shell: bash
+        run: |
+          set -e
+
+          echo "===== PROVIDER SOURCES ====="
+
+          find provider/src/main/java \
+            -type f \
+            -name "*.kt" \
+            -print
+
+          echo ""
+          echo "===== PROVIDER BUILD FILE ====="
+
+          grep -A20 "^dependencies" provider/build.gradle
+
+          echo ""
+          echo "===== CHECKING FOR OLD APP DEPENDENCY ====="
+
+          if grep -q "compileOnly project(':app')" provider/build.gradle; then
+            echo "ERROR: Old project dependency is still present."
+            exit 1
+          fi
+
+          echo ""
+          echo "===== CHECKING FOR NEW API JAR DEPENDENCY ====="
+
+          if ! grep -q \
+            'compileOnly files("$rootDir/provider-api.jar")' \
+            provider/build.gradle; then
+
+            echo "ERROR: provider-api.jar dependency is missing."
+            exit 1
+          fi
+
+          echo ""
+          echo "Provider configuration is correct."
 
       - name: Build provider APK
         working-directory: neoqn
         shell: bash
         run: |
+          set -e
+
           echo "===== BUILDING PROVIDER APK ====="
 
           chmod +x gradlew
@@ -345,6 +423,8 @@ jobs:
         working-directory: neoqn
         shell: bash
         run: |
+          set -e
+
           echo "===== PROVIDER APK ====="
 
           find provider/build/outputs/apk \
