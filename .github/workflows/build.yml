@@ -267,6 +267,54 @@ jobs:
 
           echo "Old project dependency successfully removed."
 
+      - name: Add NeoQN app import to providers
+        working-directory: neoqn
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          provider_root = Path(
+              "provider/src/main/java/com/lagradost/quicknovel/providers"
+          )
+
+          for p in provider_root.rglob("*.kt"):
+              s = p.read_text()
+
+              if "app." not in s:
+                  continue
+
+              if "import com.lagradost.quicknovel.app" in s:
+                  continue
+
+              lines = s.splitlines()
+
+              package_index = None
+              first_import_index = None
+
+              for i, line in enumerate(lines):
+                  if line.startswith("package "):
+                      package_index = i
+                  elif line.startswith("import ") and first_import_index is None:
+                      first_import_index = i
+
+              if package_index is None:
+                  raise SystemExit(f"No package declaration found in {p}")
+
+              insert_at = (
+                  first_import_index
+                  if first_import_index is not None
+                  else package_index + 1
+              )
+
+              lines.insert(
+                  insert_at,
+                  "import com.lagradost.quicknovel.app"
+              )
+
+              p.write_text("\n".join(lines) + "\n")
+              print(f"Added app import: {p}")
+          PY
       - name: Build provider APK
         working-directory: neoqn
         shell: bash
