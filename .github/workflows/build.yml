@@ -153,99 +153,76 @@ jobs:
           find "$KOTLIN_CLASSES/META-INF" \
             -name "*.kotlin_module" -print || true
 
-      - name: Connect provider directly to NeoQN compiled classes
-        working-directory: neoqn
+      - name: Create NeoQN provider API JAR
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
+          set -e
 
-          # ------------------------------------------------------------
-          # 1. Replace the broken project dependency.
-          #
-          # We deliberately DO NOT use:
-          #     compileOnly project(':app')
-          #
-          # because AGP tries to connect the provider to the app's
-          # Android resource artifact.
-          #
-          # Instead the provider sees the already compiled NeoQN
-          # Kotlin/Java classes directly.
-          # ------------------------------------------------------------
+          KOTLIN_CLASSES="app/build/tmp/kotlin-classes/release"
+          JAVA_CLASSES="app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes"
+          API_DIR="$GITHUB_WORKSPACE/provider-api-classes"
+          API_JAR="$GITHUB_WORKSPACE/provider-api.jar"
 
-          p = Path("provider/build.gradle")
-          s = p.read_text()
+          echo "=== Checking NeoQN compiled classes ==="
 
-          old = "compileOnly project(':app')"
+          test -d "$KOTLIN_CLASSES" || {
+            echo "ERROR: Kotlin classes directory not found:"
+            echo "$KOTLIN_CLASSES"
+            exit 1
+          }
 
-          new = """compileOnly files(
-              "$rootDir/app/build/tmp/kotlin-classes/release",
-              "$rootDir/app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes"
-          )"""
+          test -d "$JAVA_CLASSES" || {
+            echo "ERROR: Java classes directory not found:"
+            echo "$JAVA_CLASSES"
+            exit 1
+          }
 
-          if old not in s:
-              raise SystemExit(
-                  "ERROR: Could not find compileOnly project(':app') "
-                  "in provider/build.gradle"
-              )
+          echo "Kotlin classes:"
+          find "$KOTLIN_CLASSES" -type f | wc -l
 
-          s = s.replace(old, new)
+          echo "Java classes:"
+          find "$JAVA_CLASSES" -type f | wc -l
 
-          p.write_text(s)
+          rm -rf "$API_DIR" "$API_JAR"
+          mkdir -p "$API_DIR"
 
-          # ------------------------------------------------------------
-          # 2. Explicitly import the top-level NeoQN 'app' property
-          # where provider source files use app.
-          # ------------------------------------------------------------
+          echo "=== Copying Kotlin classes ==="
+          cp -a "$KOTLIN_CLASSES"/. "$API_DIR"/
 
-          provider_root = Path(
-              "provider/src/main/java/com/lagradost/quicknovel/providers"
-          )
+          echo "=== Copying Java classes ==="
+          cp -a "$JAVA_CLASSES"/. "$API_DIR"/
 
-          for p in provider_root.rglob("*.kt"):
-              s = p.read_text()
+          echo "=== Creating API JAR ==="
+          jar --create \
+              --file "$API_JAR" \
+              -C "$API_DIR" .
 
-              if "app." not in s:
-                  continue
+          echo "=== Verifying API JAR ==="
+          jar tf "$API_JAR" | grep -E \
+            'com/lagradost/quicknovel/(MainAPI|MainAPIKt|ChapterData|LoadResponse|SearchResponse)\.class' \
+            || {
+              echo "ERROR: Required NeoQN API classes are missing from provider-api.jar"
+              exit 1
+            }
 
-              if "import com.lagradost.quicknovel.app" in s:
-                  continue
+          echo "=== Checking Kotlin metadata ==="
+          jar tf "$API_JAR" | grep 'META-INF/.*\.kotlin_module' \
+            || {
+              echo "ERROR: Kotlin module metadata is missing from provider-api.jar"
+              exit 1
+            }
 
-              lines = s.splitlines()
+          echo "=== Required classes found ==="
+          jar tf "$API_JAR" | grep -E \
+            'com/lagradost/quicknovel/(MainAPI|MainAPIKt|ChapterData|LoadResponse|SearchResponse)\.class'
 
-              package_index = None
-              first_import_index = None
+          echo "=== Kotlin metadata found ==="
+          jar tf "$API_JAR" | grep 'META-INF/.*\.kotlin_module'
 
-              for i, line in enumerate(lines):
-                  if line.startswith("package "):
-                      package_index = i
-                  if line.startswith("import ") and first_import_index is None:
-                      first_import_index = i
+          echo "API JAR created:"
+          ls -lh "$API_JAR"
 
-              if package_index is None:
-                  raise SystemExit(
-                      f"ERROR: No package declaration found in {p}"
-                  )
-
-              insert_at = (
-                  first_import_index
-                  if first_import_index is not None
-                  else package_index + 1
-              )
-
-              lines.insert(
-                  insert_at,
-                  "import com.lagradost.quicknovel.app"
-              )
-
-              p.write_text("\n".join(lines) + "\n")
-
-              print(f"Added app import: {p}")
-
-          print("")
-          print("===== FINAL PROVIDER DEPENDENCY =====")
-          print(Path("provider/build.gradle").read_text())
-          PY
+              
 
       - name: Verify provider configuration
         working-directory: neoqn
