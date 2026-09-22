@@ -157,3 +157,45 @@ jobs:
           echo ""
           echo "----- R classes -----"
           find app/build -type f -name "R.class" -o -name "R\$*.class" | sort
+
+                    find app/build -type f -name "R.class" -o -name "R\$*.class" | sort
+
+      - name: Create provider API JAR
+        working-directory: neoqn
+        shell: bash
+        run: |
+          echo "===== CREATING PROVIDER API JAR ====="
+
+          rm -rf provider-api-classes
+          mkdir -p provider-api-classes
+
+          cp -R app/build/tmp/kotlin-classes/release/com provider-api-classes/
+          cp -R app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com provider-api-classes/ 2>/dev/null || true
+
+          cd provider-api-classes
+
+          jar cf ../provider-api.jar com
+
+          cd ..
+
+          echo ""
+          echo "===== PROVIDER API JAR ====="
+          ls -lh provider-api.jar
+
+          echo ""
+          echo "===== JAR CONTENTS ====="
+          jar tf provider-api.jar | grep -E \
+            'MainAPI|ChapterData|ErrorLoadingException|HeadMainPageResponse|LoadResponse|SearchResponse|UserReview|WebViewResolver|AppUtils' \
+            | head -100
+
+      - name: Change provider dependency
+        working-directory: neoqn
+        shell: bash
+        run: |
+          echo "===== CHANGING PROVIDER DEPENDENCY ====="
+
+          sed -i 's|compileOnly project('\''\:app'\'')|compileOnly files("$rootDir/provider-api.jar")|' provider/build.gradle
+
+          echo ""
+          echo "===== PROVIDER DEPENDENCIES ====="
+          grep -A10 "^dependencies" provider/build.gradle
