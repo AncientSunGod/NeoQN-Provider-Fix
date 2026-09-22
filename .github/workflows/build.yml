@@ -152,7 +152,6 @@ jobs:
           echo "----- R classes -----"
           find app/build -type f -name "R.class" -o -name "R\$*.class" | sort
 
-
       - name: Create provider API JAR
         working-directory: neoqn
         shell: bash
@@ -162,12 +161,22 @@ jobs:
           rm -rf provider-api-classes
           mkdir -p provider-api-classes
 
+          echo "Copying Kotlin classes..."
           cp -R app/build/tmp/kotlin-classes/release/com provider-api-classes/
-          cp -R app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com provider-api-classes/ 2>/dev/null || true
+
+          echo "Copying Kotlin module metadata..."
+          if [ -d app/build/tmp/kotlin-classes/release/META-INF ]; then
+            cp -R app/build/tmp/kotlin-classes/release/META-INF provider-api-classes/
+          fi
+
+          echo "Copying Java classes..."
+          if [ -d app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com ]; then
+            cp -R app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes/com provider-api-classes/
+          fi
 
           cd provider-api-classes
 
-          jar cf ../provider-api.jar com
+          jar cf ../provider-api.jar com META-INF 2>/dev/null || jar cf ../provider-api.jar com
 
           cd ..
 
@@ -176,11 +185,18 @@ jobs:
           ls -lh provider-api.jar
 
           echo ""
+          echo "===== KOTLIN MODULE METADATA ====="
+          jar tf provider-api.jar | grep "META-INF.*kotlin_module" || true
+
+          echo ""
+          echo "===== API FUNCTIONS ====="
+          jar tf provider-api.jar | grep "MainAPIKt.class" || true
+
+          echo ""
           echo "===== JAR CONTENTS ====="
           jar tf provider-api.jar | grep -E \
             'MainAPI|ChapterData|ErrorLoadingException|HeadMainPageResponse|LoadResponse|SearchResponse|UserReview|WebViewResolver|AppUtils' \
             | head -100
-
       - name: Change provider dependency
         working-directory: neoqn
         shell: bash
