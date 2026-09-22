@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout this repository
         uses: actions/checkout@v4
 
       - name: Download NeoQN v2.2.0 source
@@ -23,14 +23,14 @@ jobs:
       - name: Unpack provider overrides
         run: |
           unzip -q provider-overrides.zip -d neoqn
+          mkdir -p neoqn/provider/src/main/java/com/lagradost/quicknovel/providers
 
-      - name: Add provider module
-        working-directory: neoqn
+      - name: Add provider module to NeoQN build
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          p = Path("settings.gradle.kts")
+          p = Path("neoqn/settings.gradle.kts")
           s = p.read_text()
 
           if 'include(":provider")' not in s:
@@ -39,7 +39,7 @@ jobs:
           p.write_text(s)
           PY
 
-      - name: Set up Java 21
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -71,32 +71,107 @@ jobs:
 
           sed -i '/export JAVA_HOME="\/c\/Program Files\/Android\/Android Studio\/jbr"/d' gradlew
 
-      - name: Use compatible Gradle
+          chmod +x gradlew
+
+      - name: Use compatible Gradle version
         working-directory: neoqn
         shell: bash
         run: |
-          chmod +x gradlew
           sed -i 's/gradle-8\.11\.1-bin\.zip/gradle-8.9-bin.zip/' \
             gradle/wrapper/gradle-wrapper.properties
+
+          echo "Gradle wrapper:"
+          grep distributionUrl gradle/wrapper/gradle-wrapper.properties
 
       - name: Build NeoQN app classes
         working-directory: neoqn
         shell: bash
         run: |
+          echo "===== BUILDING MAIN APP CLASSES ====="
+
           chmod +x gradlew
 
           export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(which java)")")")"
+
+          echo "Using JAVA_HOME=$JAVA_HOME"
 
           ./gradlew --no-daemon \
             :app:compileReleaseKotlin \
             :app:compileReleaseJavaWithJavac
 
-      - name: Use NeoQN classes directly for provider
+      - name: Verify NeoQN API classes
+        working-directory: neoqn
+        shell: bash
+        run: |
+          echo "===== CHECKING NEOQN API CLASSES ====="
+
+          KOTLIN_CLASSES="app/build/tmp/kotlin-classes/release"
+          JAVA_CLASSES="app/build/intermediates/javac/release/compileReleaseJavaWithJavac/classes"
+
+          test -d "$KOTLIN_CLASSES" || {
+            echo "ERROR: Kotlin class directory was not created."
+            exit 1
+          }
+
+          test -d "$JAVA_CLASSES" || {
+            echo "ERROR: Java class directory was not created."
+            exit 1
+          }
+
+          echo ""
+          echo "MainAPI:"
+          find "$KOTLIN_CLASSES" "$JAVA_CLASSES" \
+            -name "MainAPI.class" -print
+
+          echo ""
+          echo "MainAPIKt:"
+          find "$KOTLIN_CLASSES" "$JAVA_CLASSES" \
+            -name "MainAPIKt.class" -print
+
+          echo ""
+          echo "ChapterData:"
+          find "$KOTLIN_CLASSES" "$JAVA_CLASSES" \
+            -name "ChapterData.class" -print
+
+          echo ""
+          echo "LoadResponse:"
+          find "$KOTLIN_CLASSES" "$JAVA_CLASSES" \
+            -name "LoadResponse.class" -print
+
+          echo ""
+          echo "SearchResponse:"
+          find "$KOTLIN_CLASSES" "$JAVA_CLASSES" \
+            -name "SearchResponse.class" -print
+
+          echo ""
+          echo "WebViewResolver:"
+          find "$KOTLIN_CLASSES" "$JAVA_CLASSES" \
+            -name "WebViewResolver.class" -print
+
+          echo ""
+          echo "Kotlin metadata:"
+          find "$KOTLIN_CLASSES/META-INF" \
+            -name "*.kotlin_module" -print || true
+
+      - name: Connect provider directly to NeoQN compiled classes
         working-directory: neoqn
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
+
+          # ------------------------------------------------------------
+          # 1. Replace the broken project dependency.
+          #
+          # We deliberately DO NOT use:
+          #     compileOnly project(':app')
+          #
+          # because AGP tries to connect the provider to the app's
+          # Android resource artifact.
+          #
+          # Instead the provider sees the already compiled NeoQN
+          # Kotlin/Java classes directly.
+          # ------------------------------------------------------------
 
           p = Path("provider/build.gradle")
           s = p.read_text()
@@ -110,50 +185,110 @@ jobs:
 
           if old not in s:
               raise SystemExit(
-                  "Could not find the expected compileOnly project(':app') line"
+                  "ERROR: Could not find compileOnly project(':app') "
+                  "in provider/build.gradle"
               )
 
           s = s.replace(old, new)
 
           p.write_text(s)
-          PY
 
-          echo "Provider dependency now:"
-          grep -A12 "^dependencies" provider/build.gradle
+          # ------------------------------------------------------------
+          # 2. Explicitly import the top-level NeoQN 'app' property
+          # where provider source files use app.
+          # ------------------------------------------------------------
 
-                    python3 - <<'PY'
-          from pathlib import Path
+          provider_root = Path(
+              "provider/src/main/java/com/lagradost/quicknovel/providers"
+          )
 
-          for p in Path("provider/src/main/java").rglob("*.kt"):
+          for p in provider_root.rglob("*.kt"):
               s = p.read_text()
-              if "app." in s and "import com.lagradost.quicknovel.app" not in s:
-                  lines = s.splitlines()
-                  package_index = next(
-                      i for i, line in enumerate(lines)
-                      if line.startswith("package ")
+
+              if "app." not in s:
+                  continue
+
+              if "import com.lagradost.quicknovel.app" in s:
+                  continue
+
+              lines = s.splitlines()
+
+              package_index = None
+              first_import_index = None
+
+              for i, line in enumerate(lines):
+                  if line.startswith("package "):
+                      package_index = i
+                  if line.startswith("import ") and first_import_index is None:
+                      first_import_index = i
+
+              if package_index is None:
+                  raise SystemExit(
+                      f"ERROR: No package declaration found in {p}"
                   )
-                  lines.insert(package_index + 1,
-                               "import com.lagradost.quicknovel.app")
-                  p.write_text("\n".join(lines) + "\n")
-                  print("Added app import:", p)
+
+              insert_at = (
+                  first_import_index
+                  if first_import_index is not None
+                  else package_index + 1
+              )
+
+              lines.insert(
+                  insert_at,
+                  "import com.lagradost.quicknovel.app"
+              )
+
+              p.write_text("\n".join(lines) + "\n")
+
+              print(f"Added app import: {p}")
+
+          print("")
+          print("===== FINAL PROVIDER DEPENDENCY =====")
+          print(Path("provider/build.gradle").read_text())
           PY
+
+      - name: Verify provider configuration
+        working-directory: neoqn
+        shell: bash
+        run: |
+          echo "===== PROVIDER SOURCES ====="
+          find provider/src/main/java -type f -name "*.kt" -print
+
+          echo ""
+          echo "===== PROVIDER BUILD FILE ====="
+          grep -A15 "^dependencies" provider/build.gradle
+
+          echo ""
+          echo "===== CHECKING FOR OLD APP DEPENDENCY ====="
+          if grep -q "compileOnly project(':app')" provider/build.gradle; then
+            echo "ERROR: Old project dependency is still present."
+            exit 1
+          fi
+
+          echo "Old project dependency successfully removed."
 
       - name: Build provider APK
         working-directory: neoqn
         shell: bash
         run: |
+          echo "===== BUILDING PROVIDER APK ====="
+
           chmod +x gradlew
 
           ./gradlew --no-daemon \
             --rerun-tasks \
             :provider:assembleRelease
 
-      - name: Show generated APK
+      - name: Locate provider APK
         working-directory: neoqn
         shell: bash
         run: |
-          echo "===== GENERATED PROVIDER APK ====="
-          find provider/build/outputs/apk -type f -name "*.apk" -print
+          echo "===== PROVIDER APK ====="
+
+          find provider/build/outputs/apk \
+            -type f \
+            -name "*.apk" \
+            -print
 
       - name: Upload provider APK
         uses: actions/upload-artifact@v4
