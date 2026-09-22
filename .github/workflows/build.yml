@@ -185,18 +185,14 @@ jobs:
           ls -lh provider-api.jar
 
           echo ""
-          echo "===== KOTLIN MODULE METADATA ====="
-          jar tf provider-api.jar | grep "META-INF.*kotlin_module" || true
-
-          echo ""
-          echo "===== API FUNCTIONS ====="
-          jar tf provider-api.jar | grep "MainAPIKt.class" || true
-
-          echo ""
-          echo "===== JAR CONTENTS ====="
+          echo "===== CHECKING MAIN API ====="
           jar tf provider-api.jar | grep -E \
-            'MainAPI|ChapterData|ErrorLoadingException|HeadMainPageResponse|LoadResponse|SearchResponse|UserReview|WebViewResolver|AppUtils' \
+            'MainAPI|MainActivity|MainActivityKt|CommonActivity' \
             | head -100
+
+          echo ""
+          echo "===== CHECKING KOTLIN METADATA ====="
+          jar tf provider-api.jar | grep 'kotlin_module' || true
       - name: Change provider dependency
         working-directory: neoqn
         shell: bash
