@@ -121,6 +121,23 @@ jobs:
           echo "Provider dependency now:"
           grep -A12 "^dependencies" provider/build.gradle
 
+                    python3 - <<'PY'
+          from pathlib import Path
+
+          for p in Path("provider/src/main/java").rglob("*.kt"):
+              s = p.read_text()
+              if "app." in s and "import com.lagradost.quicknovel.app" not in s:
+                  lines = s.splitlines()
+                  package_index = next(
+                      i for i, line in enumerate(lines)
+                      if line.startswith("package ")
+                  )
+                  lines.insert(package_index + 1,
+                               "import com.lagradost.quicknovel.app")
+                  p.write_text("\n".join(lines) + "\n")
+                  print("Added app import:", p)
+          PY
+
       - name: Build provider APK
         working-directory: neoqn
         shell: bash
