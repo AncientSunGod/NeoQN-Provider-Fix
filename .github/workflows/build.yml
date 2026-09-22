@@ -22,13 +22,7 @@ jobs:
           unzip -q provider-overrides.zip -d neoqn
           mkdir -p neoqn/provider/src/main/java/com/lagradost/quicknovel/providers
 
-      - name: Fetch current WTR-LAB provider
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/LagradOst/QuickNovel/master/app/src/main/java/com/lagradost/quicknovel/providers/WtrLabProvider.kt \
-            -o neoqn/provider/src/main/java/com/lagradost/quicknovel/providers/WtrLabProvider.kt
-          sed -i 's/override val iconId = R.drawable.icon_wtrlab/override val iconId: Int? = null/' \
-            neoqn/provider/src/main/java/com/lagradost/quicknovel/providers/WtrLabProvider.kt
-
+      
       - name: Add provider module to NeoQN build
         run: |
           python3 - <<'PY'
